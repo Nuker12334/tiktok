@@ -27,7 +27,6 @@ async def fetch_free_proxies():
                     for line in lines:
                         line = line.strip()
                         if line:
-                            # Proxifly lists them as IP:PORT
                             temp_proxies.append(f"http://{line}")
                     
                     if temp_proxies:
@@ -93,7 +92,7 @@ def generate_usernames(count=15):
         usernames.add(combo.lower())
     return list(usernames)
 
-# ---------- API Checker with Proxies ----------
+# ---------- API Checker with Proxies & Retry Logic ----------
 async def check_username(session, username):
     results = {'discord': None, 'tiktok': None}
     headers = {
@@ -102,32 +101,37 @@ async def check_username(session, username):
         "Content-Type": "application/json"
     }
     
-    proxy = get_random_proxy()
-
-    # Discord Lookup
-    discord_url = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
-    try:
-        async with session.post(discord_url, json={"username": username}, headers=headers, proxy=proxy, timeout=4) as resp:
-            if resp.status == 200:
-                data = await resp.json()
-                results['discord'] = not data.get('taken', True)
-            else:
-                results['discord'] = f"HTTP {resp.status}"
-    except Exception:
-        results['discord'] = "Timeout/Error"
-
-    # TikTok Lookup
-    tiktok_url = f"https://www.tiktok.com/@{username}"
-    try:
-        async with session.head(tiktok_url, headers=headers, allow_redirects=False, proxy=proxy, timeout=4) as resp:
-            if resp.status == 404:
-                results['tiktok'] = True
-            elif resp.status == 200:
-                results['tiktok'] = False
-            else:
-                results['tiktok'] = f"HTTP {resp.status}"
-    except Exception:
-        results['tiktok'] = "Timeout/Error"
+    # --- DISCORD LOOKUP (With 1 Auto-Retry) ---
+    for attempt in range(2):
+        proxy = get_random_proxy()
+        discord_url = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
+        try:
+            async with session.post(discord_url, json={"username": username}, headers=headers, proxy=proxy, timeout=8) as resp:
+                if resp.status == 200:
+                    data = await resp.json()
+                    results['discord'] = not data.get('taken', True)
+                    break
+                else:
+                    results['discord'] = f"HTTP {resp.status}"
+        except Exception:
+            results['discord'] = "Timeout/Error"
+            
+    # --- TIKTOK LOOKUP (With 1 Auto-Retry) ---
+    for attempt in range(2):
+        proxy = get_random_proxy()
+        tiktok_url = f"https://www.tiktok.com/@{username}"
+        try:
+            async with session.head(tiktok_url, headers=headers, allow_redirects=False, proxy=proxy, timeout=8) as resp:
+                if resp.status == 404:
+                    results['tiktok'] = True
+                    break
+                elif resp.status == 200:
+                    results['tiktok'] = False
+                    break
+                else:
+                    results['tiktok'] = f"HTTP {resp.status}"
+        except Exception:
+            results['tiktok'] = "Timeout/Error"
 
     return results
 
@@ -171,7 +175,7 @@ async def main():
                 t_val = results.get('tiktok')
                 if t_val is True: t_web = "<span class='available'>[AVAILABLE]</span>"
                 elif t_val is False: t_web = "<span class='taken'>[TAKEN]</span>"
-                else: t_web = f"<span class='error'>[{t_val}]</span>" # Fixed typo here
+                else: t_web = f"<span class='error'>[{t_val}]</span>"
                 
                 web_log = f"👤 <b>{username}</b> &nbsp;|&nbsp; Discord: {d_web} &nbsp;|&nbsp; TikTok: {t_web}"
                 recent_checks.append(web_log)
