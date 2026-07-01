@@ -1,6 +1,6 @@
 import asyncio
 import aiohttp
-from aiohttp import web  # Fixed: explicitly import web to stop the AttributeError
+from aiohttp import web
 import random
 import string
 import os
@@ -8,15 +8,49 @@ import os
 # ---------- CONFIG ----------
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://discord.com/api/webhooks/1521761282091384883/1K9VG1irCWgQDPzZJ8qhkM0EjV6pH5uPqNkzEnfYWI7M_brxgcy3VJo0lfz4iLVtPRND")
 
-# Colors
+# Terminal Colors
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
 
-# ---------- Dummy Web Server for Render ----------
+# Global list to store recent checks for the website display
+recent_checks = []
+
+# ---------- Web Server Configuration ----------
 async def handle_ping(request):
-    return web.Response(text="Bot is online and running!")
+    # Generates a basic HTML view of the live tracking data
+    html_content = """
+    <html>
+    <head>
+        <title>Username Sniper Dashboard</title>
+        <meta http-equiv="refresh" content="5"> <style>
+            body { font-family: Arial, sans-serif; background-color: #121212; color: #e0e0e0; padding: 20px; }
+            h1 { color: #ffffff; border-bottom: 2px solid #333; padding-bottom: 10px; }
+            .check-entry { background: #1e1e1e; padding: 10px; margin-bottom: 8px; border-radius: 5px; font-family: monospace; font-size: 14px; }
+            .available { color: #4caf50; font-weight: bold; }
+            .taken { color: #f44336; font-weight: bold; }
+            .error { color: #ffeb3b; }
+        </style>
+    </head>
+    <body>
+        <h1>🎯 Live Username Sniper Logs</h1>
+        <p><i>Page auto-refreshes every 5 seconds. Storing last 20 checks.</i></p>
+        <div>
+    """
+    
+    if not recent_checks:
+        html_content += "<p>Starting cycles... No usernames checked yet.</p>"
+    else:
+        for entry in reversed(recent_checks): # Show newest on top
+            html_content += f"<div class='check-entry'>{entry}</div>"
+            
+    html_content += """
+        </div>
+    </body>
+    </html>
+    """
+    return web.Response(text=html_content, content_type='text/html')
 
 async def start_web_server():
     app = web.Application()
@@ -27,7 +61,7 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 8080))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
-    print(f"🌐 Dummy web server started on port {port}")
+    print(f"🌐 Dashboard available on port {port}")
 
 # ---------- Specific Pattern Username Generator ----------
 def generate_usernames(count=15):
@@ -42,7 +76,6 @@ def generate_usernames(count=15):
 # ---------- API Checker ----------
 async def check_username(session, username):
     results = {'discord': None, 'tiktok': None}
-    
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
         "Accept": "application/json",
@@ -94,8 +127,6 @@ async def send_webhook(session, username, platforms):
 # ---------- Main Loop ----------
 async def main():
     print("🚀 High-Speed Sniper Active on Render.\n")
-    
-    # Start Render dummy server alongside the loop
     await start_web_server()
     
     connector = aiohttp.TCPConnector()
@@ -111,33 +142,46 @@ async def main():
             for username in usernames:
                 results = await check_username(session, username)
                 
-                print(f"👤 {username} ->", end=" ")
-                
-                d = results.get('discord')
-                if d is True:
-                    print(f"Discord: {GREEN}[AVAILABLE]{RESET}", end=" | ")
-                elif d is False:
-                    print(f"Discord: {RED}[TAKEN]{RESET}", end=" | ")
+                # Format text strings for the live web dashboard UI
+                d_val = results.get('discord')
+                if d_val is True:
+                    d_web = "<span class='available'>[AVAILABLE]</span>"
+                    print(f"👤 {username} -> Discord: {GREEN}[AVAILABLE]{RESET}", end=" | ")
+                elif d_val is False:
+                    d_web = "<span class='taken'>[TAKEN]</span>"
+                    print(f"👤 {username} -> Discord: {RED}[TAKEN]{RESET}", end=" | ")
                 else:
-                    print(f"Discord: {YELLOW}[{d}]{RESET}", end=" | ")
+                    d_web = f"<span class='error'>[{d_val}]</span>"
+                    print(f"👤 {username} -> Discord: {YELLOW}[{d_val}]{RESET}", end=" | ")
                 
-                t = results.get('tiktok')
-                if t is True:
+                t_val = results.get('tiktok')
+                if t_val is True:
+                    t_web = "<span class='available'>[AVAILABLE]</span>"
                     print(f"TikTok: {GREEN}[AVAILABLE]{RESET}")
-                elif t is False:
+                elif t_val is False:
+                    t_web = "<span class='taken'>[TAKEN]</span>"
                     print(f"TikTok: {RED}[TAKEN]{RESET}")
                 else:
-                    print(f"TikTok: {YELLOW}[{t}]{RESET}")
+                    t_web = f"<span class='error'>[{t_val}]</span>"
+                    print(f"TikTok: {YELLOW}[{t_val}]{RESET}")
                 
-                # Check for hits
+                # Save data log structure to the web view list
+                web_log = f"👤 <b>{username}</b> &nbsp;|&nbsp; Discord: {d_web} &nbsp;|&nbsp; TikTok: {t_web}"
+                recent_checks.append(web_log)
+                
+                # Keep list limited to last 20 entries so it stays clean
+                if len(recent_checks) > 20:
+                    recent_checks.pop(0)
+                
+                # Hit checking
                 available = []
-                if d is True: available.append("Discord")
-                if t is True: available.append("TikTok")
+                if d_val is True: available.append("Discord")
+                if t_val is True: available.append("TikTok")
                 
                 if available:
                     await send_webhook(session, username, available)
                 
-                await asyncio.sleep(2) # Safe delay to avoid quick cloud bans
+                await asyncio.sleep(2)
         
             print(f"\n✅ Cycle #{cycle} complete. Cooling down...")
             await asyncio.sleep(10)
