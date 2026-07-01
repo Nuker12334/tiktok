@@ -15,7 +15,6 @@ PROXIES = []
 # ---------- FETCH PROXIFLY FREE PROXIES ----------
 async def fetch_free_proxies():
     global PROXIES
-    # URL pointing directly to Proxifly's raw live HTTP/HTTPS data text list
     url = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt"
     try:
         async with aiohttp.ClientSession() as session:
@@ -29,7 +28,6 @@ async def fetch_free_proxies():
                         line = line.strip()
                         if line:
                             # Proxifly lists them as IP:PORT
-                            # We prefix 'http://' so aiohttp recognizes it correctly
                             temp_proxies.append(f"http://{line}")
                     
                     if temp_proxies:
@@ -40,7 +38,6 @@ async def fetch_free_proxies():
     except Exception as e:
         print(f"❌ Failed to fetch Proxifly list: {e}")
     
-    # Fallback to empty if it fails
     PROXIES = []
 
 def get_random_proxy():
@@ -150,8 +147,6 @@ async def send_webhook(session, username, platforms):
 async def main():
     print("🚀 High-Speed Sniper Active on Render with Free Proxy Rotation.\n")
     await start_web_server()
-    
-    # Download the free proxies right when the script starts up
     await fetch_free_proxies()
     
     connector = aiohttp.TCPConnector()
@@ -162,7 +157,6 @@ async def main():
             cycle += 1
             usernames = generate_usernames(count=10)
             
-            # Re-fetch fresh proxies from GitHub every 5 cycles to replace dead ones
             if cycle % 5 == 0:
                 await fetch_free_proxies()
             
@@ -177,7 +171,7 @@ async def main():
                 t_val = results.get('tiktok')
                 if t_val is True: t_web = "<span class='available'>[AVAILABLE]</span>"
                 elif t_val is False: t_web = "<span class='taken'>[TAKEN]</span>"
-                else: d_web = f"<span class='error'>[{t_val}]</span>"
+                else: t_web = f"<span class='error'>[{t_val}]</span>" # Fixed typo here
                 
                 web_log = f"👤 <b>{username}</b> &nbsp;|&nbsp; Discord: {d_web} &nbsp;|&nbsp; TikTok: {t_web}"
                 recent_checks.append(web_log)
