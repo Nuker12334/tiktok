@@ -2,16 +2,34 @@ import asyncio
 import aiohttp
 import random
 import string
-import sys
+import os
 
 # ---------- CONFIG ----------
-WEBHOOK_URL = "https://discord.com/api/webhooks/1521761282091384883/1K9VG1irCWgQDPzZJ8qhkM0EjV6pH5uPqNkzEnfYWI7M_brxgcy3VJo0lfz4iLVtPRND"
+# Best Practice: Load the webhook from environment variables on Render
+# If not set in Render dashboard, it defaults to your hardcoded one below.
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://discord.com/api/webhooks/1521761282091384883/1K9VG1irCWgQDPzZJ8qhkM0EjV6pH5uPqNkzEnfYWI7M_brxgcy3VJo0lfz4iLVtPRND")
 
 # Colors
 GREEN = '\033[92m'
 RED = '\033[91m'
 YELLOW = '\033[93m'
 RESET = '\033[0m'
+
+# ---------- Dummy Web Server for Render ----------
+async def handle_ping(request):
+    return aiohttp.web.Response(text="Bot is online and running!")
+
+async def start_web_server():
+    app = aiohttp.web.Application()
+    app.router.add_get('/', handle_ping)
+    runner = aiohttp.web.AppRunner(app)
+    await runner.setup()
+    
+    # Render automatically sets the PORT environment variable
+    port = int(os.environ.get("PORT", 8080))
+    site = aiohttp.web.TCPSite(runner, '0.0.0.0', port)
+    await site.start()
+    print(f"🌐 Dummy web server started on port {port}")
 
 # ---------- Specific Pattern Username Generator ----------
 def generate_usernames(count=15):
@@ -78,6 +96,9 @@ async def send_webhook(session, username, platforms):
 # ---------- Main Loop ----------
 async def main():
     print("🚀 High-Speed Sniper Active on Render.\n")
+    
+    # Start Render dummy server alongside the loop
+    await start_web_server()
     
     connector = aiohttp.TCPConnector()
     cycle = 0
