@@ -8,23 +8,40 @@ import os
 # ---------- CONFIG ----------
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://discord.com/api/webhooks/1521761282091384883/1K9VG1irCWgQDPzZJ8qhkM0EjV6pH5uPqNkzEnfYWI7M_brxgcy3VJo0lfz4iLVtPRND")
 
-# Global list to store recent checks for the website display
+# Global variables
 recent_checks = []
+PROXIES = []
 
-# ---------- WEBSHARE PROXIES ----------
-# Your 10 active proxies configured into standard HTTP format
-PROXIES = [
-    "http://wjfsdyaq:1wz6vbsgtkri@31.59.20.176:6754",
-    "http://wjfsdyaq:1wz6vbsgtkri@31.56.127.193:7684",
-    "http://wjfsdyaq:1wz6vbsgtkri@45.38.107.97:6014",
-    "http://wjfsdyaq:1wz6vbsgtkri@38.154.203.95:5863",
-    "http://wjfsdyaq:1wz6vbsgtkri@198.105.121.200:6462",
-    "http://wjfsdyaq:1wz6vbsgtkri@64.137.96.74:6641",
-    "http://wjfsdyaq:1wz6vbsgtkri@198.23.243.226:6361",
-    "http://wjfsdyaq:1wz6vbsgtkri@38.154.185.97:6370",
-    "http://wjfsdyaq:1wz6vbsgtkri@142.111.67.146:5611",
-    "http://wjfsdyaq:1wz6vbsgtkri@191.96.254.138:6185"
-]
+# ---------- FETCH PROXIFLY FREE PROXIES ----------
+async def fetch_free_proxies():
+    global PROXIES
+    # URL pointing directly to Proxifly's raw live HTTP/HTTPS data text list
+    url = "https://cdn.jsdelivr.net/gh/proxifly/free-proxy-list@main/proxies/all/data.txt"
+    try:
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url, timeout=10) as resp:
+                if resp.status == 200:
+                    text = await resp.text()
+                    lines = text.splitlines()
+                    
+                    temp_proxies = []
+                    for line in lines:
+                        line = line.strip()
+                        if line:
+                            # Proxifly lists them as IP:PORT
+                            # We prefix 'http://' so aiohttp recognizes it correctly
+                            temp_proxies.append(f"http://{line}")
+                    
+                    if temp_proxies:
+                        PROXIES = temp_proxies
+                        print(f"✅ Successfully loaded {len(PROXIES)} free proxies from Proxifly!")
+                        return
+        print("⚠️ Warning: Proxy list downloaded but parsed empty.")
+    except Exception as e:
+        print(f"❌ Failed to fetch Proxifly list: {e}")
+    
+    # Fallback to empty if it fails
+    PROXIES = []
 
 def get_random_proxy():
     if not PROXIES:
@@ -48,12 +65,12 @@ async def handle_ping(request):
         </style>
     </head>
     <body>
-        <h1>🎯 Live Username Sniper Logs (Proxies Active)</h1>
+        <h1>🎯 Live Username Sniper Logs (Free Proxifly List)</h1>
         <p><i>Page auto-refreshes every 5 seconds. Storing last 20 checks.</i></p>
         <div>
     """
     if not recent_checks:
-        html_content += "<p>Starting cycles... No usernames checked yet.</p>"
+        html_content += f"<p>Starting cycles... Loaded {len(PROXIES)} potential proxies.</p>"
     else:
         for entry in reversed(recent_checks):
             html_content += f"<div class='check-entry'>{entry}</div>"
@@ -93,19 +110,19 @@ async def check_username(session, username):
     # Discord Lookup
     discord_url = "https://discord.com/api/v9/unique-username/username-attempt-unauthed"
     try:
-        async with session.post(discord_url, json={"username": username}, headers=headers, proxy=proxy, timeout=5) as resp:
+        async with session.post(discord_url, json={"username": username}, headers=headers, proxy=proxy, timeout=4) as resp:
             if resp.status == 200:
                 data = await resp.json()
                 results['discord'] = not data.get('taken', True)
             else:
                 results['discord'] = f"HTTP {resp.status}"
     except Exception:
-        results['discord'] = "Error"
+        results['discord'] = "Timeout/Error"
 
     # TikTok Lookup
     tiktok_url = f"https://www.tiktok.com/@{username}"
     try:
-        async with session.head(tiktok_url, headers=headers, allow_redirects=False, proxy=proxy, timeout=5) as resp:
+        async with session.head(tiktok_url, headers=headers, allow_redirects=False, proxy=proxy, timeout=4) as resp:
             if resp.status == 404:
                 results['tiktok'] = True
             elif resp.status == 200:
@@ -113,7 +130,7 @@ async def check_username(session, username):
             else:
                 results['tiktok'] = f"HTTP {resp.status}"
     except Exception:
-        results['tiktok'] = "Error"
+        results['tiktok'] = "Timeout/Error"
 
     return results
 
@@ -131,8 +148,11 @@ async def send_webhook(session, username, platforms):
 
 # ---------- Main Loop ----------
 async def main():
-    print("🚀 High-Speed Sniper Active on Render with Proxy Rotation.\n")
+    print("🚀 High-Speed Sniper Active on Render with Free Proxy Rotation.\n")
     await start_web_server()
+    
+    # Download the free proxies right when the script starts up
+    await fetch_free_proxies()
     
     connector = aiohttp.TCPConnector()
     cycle = 0
@@ -141,6 +161,10 @@ async def main():
         while True:
             cycle += 1
             usernames = generate_usernames(count=10)
+            
+            # Re-fetch fresh proxies from GitHub every 5 cycles to replace dead ones
+            if cycle % 5 == 0:
+                await fetch_free_proxies()
             
             for username in usernames:
                 results = await check_username(session, username)
@@ -153,7 +177,7 @@ async def main():
                 t_val = results.get('tiktok')
                 if t_val is True: t_web = "<span class='available'>[AVAILABLE]</span>"
                 elif t_val is False: t_web = "<span class='taken'>[TAKEN]</span>"
-                else: t_web = f"<span class='error'>[{t_val}]</span>"
+                else: d_web = f"<span class='error'>[{t_val}]</span>"
                 
                 web_log = f"👤 <b>{username}</b> &nbsp;|&nbsp; Discord: {d_web} &nbsp;|&nbsp; TikTok: {t_web}"
                 recent_checks.append(web_log)
@@ -170,7 +194,7 @@ async def main():
                 
                 await asyncio.sleep(2)
         
-            await asyncio.sleep(10)
+            await asyncio.sleep(2)
 
 if __name__ == "__main__":
     asyncio.run(main())
