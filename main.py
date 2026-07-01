@@ -1,12 +1,11 @@
 import asyncio
 import aiohttp
+from aiohttp import web  # Fixed: explicitly import web to stop the AttributeError
 import random
 import string
 import os
 
 # ---------- CONFIG ----------
-# Best Practice: Load the webhook from environment variables on Render
-# If not set in Render dashboard, it defaults to your hardcoded one below.
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "https://discord.com/api/webhooks/1521761282091384883/1K9VG1irCWgQDPzZJ8qhkM0EjV6pH5uPqNkzEnfYWI7M_brxgcy3VJo0lfz4iLVtPRND")
 
 # Colors
@@ -17,17 +16,16 @@ RESET = '\033[0m'
 
 # ---------- Dummy Web Server for Render ----------
 async def handle_ping(request):
-    return aiohttp.web.Response(text="Bot is online and running!")
+    return web.Response(text="Bot is online and running!")
 
 async def start_web_server():
-    app = aiohttp.web.Application()
+    app = web.Application()
     app.router.add_get('/', handle_ping)
-    runner = aiohttp.web.AppRunner(app)
+    runner = web.AppRunner(app)
     await runner.setup()
     
-    # Render automatically sets the PORT environment variable
     port = int(os.environ.get("PORT", 8080))
-    site = aiohttp.web.TCPSite(runner, '0.0.0.0', port)
+    site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
     print(f"🌐 Dummy web server started on port {port}")
 
